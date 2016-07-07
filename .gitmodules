@@ -1,0 +1,3 @@
+[submodule "docker/benchmark-caffe/caffe"]
+	path = docker/benchmark-caffe/caffe
+	url = https://github.com/BVLC/caffe.git
