@@ -1,0 +1,9 @@
+[package]
+name = "driver"
+version = "0.1.0"
+authors = ["Ben Chandler <benjamin.chandler@hpe.com>"]
+
+[dependencies]
+regex = "0.1"
+log = "0.3.6"
+env_logger = "0.3"
