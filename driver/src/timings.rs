@@ -29,7 +29,7 @@ pub fn benchmark(baseline: Instant, net: String, batch_size: u32, gpu: u32) -> R
         .arg("run")
         .arg("--rm")
         .arg("-i")
-        .arg("benchmark")
+        .arg("benchmark-caffe")
         .arg(net)
         .arg(batch_size.to_string())
         .env("NV_GPU", gpu.to_string())
