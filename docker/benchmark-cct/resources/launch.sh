@@ -17,4 +17,4 @@
 set -e
 
 # turn execution over to SBT with args wrapped
-exec /opt/sbt/bin/sbt "test:runMain toolkit.neuralnetwork.performance.Benchmark $1 $2"
+exec /opt/sbt/bin/sbt "test:runMain toolkit.neuralnetwork.performance.Benchmark $1 $2" 1>&2

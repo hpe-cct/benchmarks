@@ -43,4 +43,4 @@ echo "Batch size: $batch_size" >&2
 sed -i "s/dim: [[:digit:]]\+/dim: $batch_size/1" ${path}
 
 # turn execution over to Caffe
-exec /opt/caffe/build/tools/caffe time -model ${path} -gpu all
+exec /opt/caffe/build/tools/caffe time -model ${path} -gpu all 1>&2
