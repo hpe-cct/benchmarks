@@ -40,6 +40,6 @@ WORKDIR /workspace
 RUN git clone https://github.com/hpe-cct/cct-nn.git . && \
     sbt compile test:compile
 
-#COPY resources/launch.sh /workspace
+COPY resources/launch.sh /workspace
 
-#ENTRYPOINT ["/workspace/launch.sh"]
+ENTRYPOINT ["/workspace/launch.sh"]

@@ -1,6 +1,6 @@
 .PHONY: test clean
 
-build: upstream Dockerfile #resources/*
+build: upstream Dockerfile resources/*
 	docker build --build-arg http_proxy --build-arg https_proxy -t benchmark-cct .
 	touch build
 
