@@ -1,3 +1,6 @@
 [submodule "docker/benchmark-caffe/caffe"]
 	path = docker/benchmark-caffe/caffe
 	url = https://github.com/BVLC/caffe.git
+[submodule "docker/benchmark-cct/nvidia-docker"]
+	path = docker/benchmark-cct/nvidia-docker
+	url = https://github.com/NVIDIA/nvidia-docker.git
