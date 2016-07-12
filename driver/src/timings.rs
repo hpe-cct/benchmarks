@@ -38,25 +38,7 @@ fn ms_to_duration(ms: f64) -> Duration {
     Duration::new(seconds as u64, nanos as u32)
 }
 
-pub fn benchmark(baseline: Instant, net: String, batch_size: u32, gpu: u32) -> Result<Vec<BenchmarkEvent>, String> {
-    info!("launching Caffe process (net: {}, batch_size: {}, gpu: {})", net, batch_size, gpu);
-
-    let mut child = match Command::new("nvidia-docker")
-        .arg("run")
-        .arg("--rm")
-        .arg("-i")
-        .arg("benchmark-caffe")
-        .arg(net)
-        .arg(batch_size.to_string())
-        .env("NV_GPU", gpu.to_string())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .stdin(Stdio::null())
-        .spawn() {
-            Ok(c) => c,
-            Err(e) => return Err(format!("failed to execute process nvidia-docker: {}", e))
-        };
-
+fn consume_buffer(buffer: &mut String, baseline: Instant, events: &mut Vec<BenchmarkEvent>) {
     // "Iteration:" <int> "forward-backward time:" <f32> "ms." -> IterForwardBackward(iteration, time)
     // <string> "forward:" <f32> "ms." -> LayerForward(layer, time)
     // <string> "backward:" <f32> "ms." -> LayerBackward(layer, time)
@@ -70,61 +52,84 @@ pub fn benchmark(baseline: Instant, net: String, batch_size: u32, gpu: u32) -> R
     let avg_backward = Regex::new(r"Average Backward pass: (?P<time>\d*[.]\d*) ms[.]").unwrap();
     let avg_forward_backward = Regex::new(r"Average Forward-Backward: (?P<time>\d*[.]\d*) ms[.]").unwrap();
 
+    iter_forward_backward.captures(&buffer).map(|i| {
+        info!("{:?}", i);
+        let it = i.name("iter").unwrap().parse().unwrap();
+        let v = ms_to_duration(i.name("time").unwrap().parse().unwrap());
+        let e = BenchmarkEvent::IterForwardBackward {timestamp: baseline.elapsed(), iteration: it, time: v};
+        events.push(e)
+    });
+
+    layer_forward.captures(&buffer).map(|i| {
+        info!("{:?}", i);
+        let l = i.name("layer").unwrap().to_string();
+        let v = ms_to_duration(i.name("time").unwrap().parse().unwrap());
+        let e = BenchmarkEvent::LayerForward {timestamp: baseline.elapsed(), layer: l, time: v};
+        events.push(e)
+    });
+
+    layer_backward.captures(&buffer).map(|i| {
+        info!("{:?}", i);
+        let l = i.name("layer").unwrap().to_string();
+        let v = ms_to_duration(i.name("time").unwrap().parse().unwrap());
+        let e = BenchmarkEvent::LayerBackward {timestamp: baseline.elapsed(), layer: l, time: v};
+        events.push(e)
+    });
+
+    avg_forward.captures(&buffer).map(|i| {
+        info!("{:?}", i);
+        let v = ms_to_duration(i.name("time").unwrap().parse().unwrap());
+        let e = BenchmarkEvent::AvgForward {timestamp: baseline.elapsed(), time: v};
+        events.push(e)
+    });
+
+    avg_backward.captures(&buffer).map(|i| {
+        info!("{:?}", i);
+        let v = ms_to_duration(i.name("time").unwrap().parse().unwrap());
+        let e = BenchmarkEvent::AvgBackward {timestamp: baseline.elapsed(), time: v};
+        events.push(e)
+    });
+
+    avg_forward_backward.captures(&buffer).map(|i| {
+        info!("{:?}", i);
+        let v = ms_to_duration(i.name("time").unwrap().parse().unwrap());
+        let e = BenchmarkEvent::AvgForwardBackward {timestamp: baseline.elapsed(), time: v};
+        events.push(e)
+    });
+
+    buffer.clear();
+}
+
+pub fn benchmark(baseline: Instant, container: String, net: String, batch_size: u32, gpu: u32) -> Result<Vec<BenchmarkEvent>, String> {
+    info!("launching Docker container (container: {}, net: {}, batch_size: {}, gpu: {})", container, net, batch_size, gpu);
+
+    let mut child = match Command::new("nvidia-docker")
+        .arg("run")
+        .arg("--rm")
+        .arg("-i")
+        .arg(container)
+        .arg(net)
+        .arg(batch_size.to_string())
+        .env("NV_GPU", gpu.to_string())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .stdin(Stdio::null())
+        .spawn() {
+            Ok(c) => c,
+            Err(e) => return Err(format!("failed to execute process nvidia-docker: {}", e))
+        };
+
     info!("process launched, parsing output");
 
     let mut events: Vec<BenchmarkEvent> = vec!();
 
     let stderr = child.stderr.take().unwrap();
-    let mut reader = BufReader::new(stderr);
-    let mut buffer = String::new();
+    let mut err_reader = BufReader::new(stderr);
+    let mut err_buffer = String::new();
 
-    while reader.read_line(&mut buffer).unwrap() > 0 {
-        iter_forward_backward.captures(&buffer).map(|i| {
-            info!("{:?}", i);
-            let it = i.name("iter").unwrap().parse().unwrap();
-            let v = ms_to_duration(i.name("time").unwrap().parse().unwrap());
-            let e = BenchmarkEvent::IterForwardBackward {timestamp: baseline.elapsed(), iteration: it, time: v};
-            events.push(e)
-        });
-
-        layer_forward.captures(&buffer).map(|i| {
-            info!("{:?}", i);
-            let l = i.name("layer").unwrap().to_string();
-            let v = ms_to_duration(i.name("time").unwrap().parse().unwrap());
-            let e = BenchmarkEvent::LayerForward {timestamp: baseline.elapsed(), layer: l, time: v};
-            events.push(e)
-        });
-
-        layer_backward.captures(&buffer).map(|i| {
-            info!("{:?}", i);
-            let l = i.name("layer").unwrap().to_string();
-            let v = ms_to_duration(i.name("time").unwrap().parse().unwrap());
-            let e = BenchmarkEvent::LayerBackward {timestamp: baseline.elapsed(), layer: l, time: v};
-            events.push(e)
-        });
-
-        avg_forward.captures(&buffer).map(|i| {
-            info!("{:?}", i);
-            let v = ms_to_duration(i.name("time").unwrap().parse().unwrap());
-            let e = BenchmarkEvent::AvgForward {timestamp: baseline.elapsed(), time: v};
-            events.push(e)
-        });
-
-        avg_backward.captures(&buffer).map(|i| {
-            info!("{:?}", i);
-            let v = ms_to_duration(i.name("time").unwrap().parse().unwrap());
-            let e = BenchmarkEvent::AvgBackward {timestamp: baseline.elapsed(), time: v};
-            events.push(e)
-        });
-
-        avg_forward_backward.captures(&buffer).map(|i| {
-            info!("{:?}", i);
-            let v = ms_to_duration(i.name("time").unwrap().parse().unwrap());
-            let e = BenchmarkEvent::AvgForwardBackward {timestamp: baseline.elapsed(), time: v};
-            events.push(e)
-        });
-
-        buffer.clear();
+    while err_reader.read_line(&mut err_buffer).unwrap() > 0 {
+        debug!("child stderr line: {:?}", err_buffer);
+        consume_buffer(&mut err_buffer, baseline, &mut events);
     }
 
     let ecode = match child.wait() {

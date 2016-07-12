@@ -31,6 +31,7 @@ use std::time::{Instant, Duration};
 
 #[derive(Clone, Debug)]
 struct RunConfig {
+    container: String,
     net: String,
     batch_size: u32,
     gpu: u32
@@ -44,6 +45,7 @@ struct RunResult {
 
 #[derive(Debug, RustcEncodable)]
 struct RunErrorRecord {
+    container: String,
     net: String,
     batch_size: u32,
     gpu: u32,
@@ -52,6 +54,7 @@ struct RunErrorRecord {
 
 #[derive(Debug, RustcEncodable)]
 struct RunAverageRecord {
+    container: String,
     net: String,
     batch_size: u32,
     gpu: u32,
@@ -89,6 +92,7 @@ fn main() {
     // Set up the logger
     env_logger::init().unwrap();
 
+    let containers = vec!["benchmark-caffe", "benchmark-cct"];
     let gpus = vec![0, 1];
     let batch_sizes = vec![1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8096, 16384, 32768, 65536];
     let nets = vec!["alexnet", "cifar10_quick"];
@@ -99,16 +103,19 @@ fn main() {
 
     let mut configurations: Vec<RunConfig> = vec![];
 
-    for g in &gpus {
-        for n in &nets {
-            for b in &batch_sizes {
-                let config = RunConfig {
-                    net: n.to_string(),
-                    batch_size: *b,
-                    gpu: *g
-                };
+    for c in &containers {
+        for g in &gpus {
+            for n in &nets {
+                for b in &batch_sizes {
+                    let config = RunConfig {
+                        container: c.to_string(),
+                        net: n.to_string(),
+                        batch_size: *b,
+                        gpu: *g
+                    };
 
-                configurations.push(config);
+                    configurations.push(config);
+                }
             }
         }
     }
@@ -124,7 +131,7 @@ fn main() {
     for c in configurations {
         let result = RunResult {
             config: c.clone(),
-            result: timings::benchmark(baseline, c.net, c.batch_size, c.gpu)
+            result: timings::benchmark(baseline, c.container, c.net, c.batch_size, c.gpu)
         };
         results.push(result);
     }
@@ -132,11 +139,12 @@ fn main() {
     // Write the first output table: failed points in the configuration space
     {
         let mut writer = csv::Writer::from_file("failed.csv").unwrap();
-        writer.write(vec!["net", "batch_size", "gpu", "error"].into_iter()).unwrap();
+        writer.write(vec!["container", "net", "batch_size", "gpu", "error"].into_iter()).unwrap();
         for r in &results {
             match &r.result {
                 &Err(ref s) => {
                     let line = RunErrorRecord {
+                        container: r.config.container.clone(),
                         net: r.config.net.clone(),
                         batch_size: r.config.batch_size,
                         gpu: r.config.gpu,
@@ -154,7 +162,7 @@ fn main() {
     // Write the second output table: average performance at valid points in the configuration space
     {
         let mut writer = csv::Writer::from_file("valid.csv").unwrap();
-        writer.write(vec!["net", "batch_size", "gpu", "forward", "backward", "total"].into_iter()).unwrap();
+        writer.write(vec!["container", "net", "batch_size", "gpu", "forward", "backward", "total"].into_iter()).unwrap();
         for r in &results {
             match &r.result {
                 &Err(_) => (),
@@ -174,6 +182,7 @@ fn main() {
                     }
 
                     let line = RunAverageRecord {
+                        container: r.config.container.clone(),
                         net: r.config.net.clone(),
                         batch_size: r.config.batch_size,
                         gpu: r.config.gpu,
